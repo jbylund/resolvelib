@@ -173,7 +173,7 @@ class Resolution(object):
             raise RequirementsConflicted(criterion)
         criteria[identifier] = criterion
 
-    def _get_preference(self, name):
+    def _get_preference(self, name, causes):
         return self._p.get_preference(
             identifier=name,
             resolutions=self.state.mapping,
@@ -185,7 +185,7 @@ class Resolution(object):
                 self.state.criteria,
                 operator.attrgetter("information"),
             ),
-            backtrack_causes=self.state.backtrack_causes,
+            backtrack_causes=causes,
         )
 
     def _is_current_pin_satisfying(self, name, criterion):
@@ -368,8 +368,13 @@ class Resolution(object):
                 self._r.ending(state=self.state)
                 return self.state
 
+            causes_set = self._causes_to_names(self.state.backtrack_causes)
+
+            def key_fn(name):
+                return self._get_preference(name, causes_set)
+
             # Choose the most preferred unpinned criterion to try.
-            name = min(unsatisfied_names, key=self._get_preference)
+            name = min(unsatisfied_names, key=key_fn)
             failure_causes = self._attempt_to_pin_criterion(name)
 
             if failure_causes:
@@ -390,6 +395,12 @@ class Resolution(object):
             self._r.ending_round(index=round_index, state=self.state)
 
         raise ResolutionTooDeep(max_rounds)
+
+    @staticmethod
+    def _causes_to_names(causes):
+        return {c.requirement.name for c in causes} | {
+            c.parent.name for c in causes if c.parent
+        }
 
 
 def _has_route_to_root(criteria, key, all_keys, connected):
